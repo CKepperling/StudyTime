@@ -15,3 +15,14 @@ exclude = ["alembic/versions"]
 # Following this suggestion would reintroduce a real crash, so it's
 # disabled rather than something we plan to "fix" later.
 ignore = ["FA100"]
+
+[lint.flake8-bugbear]
+# B008 normally catches "don't call a function as a default argument
+# value" - a real bug pattern, since normal defaults are evaluated
+# once and reused. FastAPI's Depends() is the deliberate, documented
+# exception: FastAPI itself specially parses Depends() calls in a
+# route's signature rather than treating them as a normal shared
+# default, so this pattern is actually required, not a mistake.
+# Telling ruff Depends is "immutable" stops the false positive here
+# without disabling B008's real protection everywhere else.
+extend-immutable-calls = ["fastapi.Depends", "fastapi.params.Depends"]
