@@ -12,6 +12,12 @@ jobs:
     defaults:
       run:
         working-directory: backend
+    # CI has no real Postgres and no .env file - this is a fake but
+    # syntactically valid connection string. It's enough because
+    # SQLAlchemy's create_engine() is lazy: it doesn't actually try
+    # to connect until a query runs, and our tests don't query the DB.
+    env:
+      DATABASE_URL: postgresql://user:password@localhost:5432/testdb
     steps:
       - uses: actions/checkout@v4
 
