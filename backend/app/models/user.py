@@ -1,7 +1,15 @@
+from typing import TYPE_CHECKING
+
 from sqlalchemy import String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base
+
+# TYPE_CHECKING is False at runtime, so this import never actually runs
+# (avoiding a circular import with document.py) - it only exists so
+# ruff and your editor can resolve the "Document" string below.
+if TYPE_CHECKING:
+    from app.models.document import Document
 
 
 class User(Base):

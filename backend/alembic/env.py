@@ -1,8 +1,7 @@
 import os
 from logging.config import fileConfig
 
-from sqlalchemy import engine_from_config
-from sqlalchemy import pool
+from sqlalchemy import engine_from_config, pool
 
 from alembic import context
 
@@ -10,8 +9,8 @@ from alembic import context
 # Base gives Alembic the schema definition, and importing `models`
 # is what actually loads every model class into Base.metadata
 # (same reason models/__init__.py exists in the first place).
-from app.db import Base
 from app import models  # noqa: F401
+from app.db import Base
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

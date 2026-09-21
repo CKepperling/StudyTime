@@ -1,0 +1,17 @@
+# Pinned to match the actual local dev Python version (3.9), so ruff
+# doesn't suggest X | Y union syntax that only works on 3.10+.
+target-version = "py39"
+
+# Alembic generates versions/*.py itself - not worth linting our own
+# style rules against code we didn't write and shouldn't hand-edit.
+exclude = ["alembic/versions"]
+
+[lint]
+# FA100 suggests rewriting Optional[str] as str | None via a
+# __future__ import. That doesn't actually work here: SQLAlchemy's
+# Mapped[] columns are eval()'d at runtime to determine the SQL type,
+# and eval() runs through the real interpreter (3.9), which still
+# can't evaluate `|` between types even with the __future__ import.
+# Following this suggestion would reintroduce a real crash, so it's
+# disabled rather than something we plan to "fix" later.
+ignore = ["FA100"]

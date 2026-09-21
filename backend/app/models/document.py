@@ -1,9 +1,18 @@
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 from sqlalchemy import ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base
+
+# See user.py for why these are guarded by TYPE_CHECKING instead of
+# being normal imports - this file references all four by name.
+if TYPE_CHECKING:
+    from app.models.flashcard import Flashcard
+    from app.models.note import Note
+    from app.models.practice_test import PracticeTest
+    from app.models.summary import Summary
+    from app.models.user import User
 
 
 class Document(Base):
@@ -21,9 +30,8 @@ class Document(Base):
     # Plain string for now; could become an Enum later like difficulty_level.
     status: Mapped[str] = mapped_column(String(50), default="pending")
 
-    # Optional[str] (not str | None) - the | union syntax needs Python 3.10+,
-    # and SQLAlchemy has to actually evaluate this at runtime, so the
-    # __future__ import trick doesn't save us here like it did for other cases.
+    # Optional[str] (not str | None) - the | union syntax needs Python 3.10+.
+    # ruff.toml pins target-version to py39 so ruff stops suggesting X | Y here.
     extracted_text: Mapped[Optional[str]] = mapped_column(String)
 
     # The other half of the relationship declared on User.
