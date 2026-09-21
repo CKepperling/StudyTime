@@ -12,12 +12,34 @@ jobs:
     defaults:
       run:
         working-directory: backend
-    # CI has no real Postgres and no .env file - this is a fake but
-    # syntactically valid connection string. It's enough because
-    # SQLAlchemy's create_engine() is lazy: it doesn't actually try
-    # to connect until a query runs, and our tests don't query the DB.
+    # A real, throwaway Postgres container just for this CI run -
+    # GitHub Actions starts it before any step runs and tears it
+    # down after, same idea as our local docker-compose postgres
+    # service but scoped to just this one job.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: studytime
+          POSTGRES_PASSWORD: studytime
+          POSTGRES_DB: studytime
+        ports:
+          - 5432:5432
+        # Waits for Postgres to actually accept connections before
+        # letting any step run - without this, the first step could
+        # try to connect before the container has finished starting.
+        options: >-
+          --health-cmd "pg_isready -U studytime -d studytime"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+    # localhost works here because GitHub Actions maps the service
+    # container's port 5432 onto the job runner's own localhost.
+    # SECRET_KEY just needs to be A value - it only has to be
+    # consistent within this one CI run, not the real production secret.
     env:
-      DATABASE_URL: postgresql://user:password@localhost:5432/testdb
+      DATABASE_URL: postgresql://studytime:studytime@localhost:5432/studytime
+      SECRET_KEY: ci-test-secret-key-not-for-production-use
     steps:
       - uses: actions/checkout@v4
 
@@ -32,6 +54,13 @@ jobs:
 
       - name: Lint
         run: ruff check .
+
+      # Creates the actual tables (users, documents, etc.) in the
+      # fresh CI postgres container - without this, test_auth.py's
+      # queries would fail with "relation users does not exist"
+      # even though the database connection itself works fine.
+      - name: Run migrations
+        run: alembic upgrade head
 
       - name: Test
         run: pytest

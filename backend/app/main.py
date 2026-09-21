@@ -1,6 +1,8 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api.auth import router as auth_router
+
 app = FastAPI(title="StudyTime API")
 
 app.add_middleware(
@@ -9,6 +11,11 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# This is what actually turns the routes defined in api/auth.py into
+# real, reachable endpoints - without this, /auth/signup and
+# /auth/login exist in code but don't respond to anything.
+app.include_router(auth_router)
 
 
 @app.get("/health")
