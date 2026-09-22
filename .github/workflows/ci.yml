@@ -44,6 +44,12 @@ jobs:
       # mode makes .delay() run the Celery task synchronously in the
       # same process instead of handing it to a broker/worker.
       CELERY_TASK_ALWAYS_EAGER: "true"
+      # generation.py reads GEMINI_API_KEY the moment it's imported,
+      # even in test_generation.py's fully-mocked tests that never
+      # actually call Gemini - so a fake value is enough to satisfy
+      # that import, same reasoning as the fake-but-valid DATABASE_URL
+      # this job used before a real Postgres service was added.
+      GEMINI_API_KEY: ci-fake-key-tests-are-fully-mocked
     steps:
       - uses: actions/checkout@v4
 
