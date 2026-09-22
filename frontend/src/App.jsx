@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Layout from "./components/Layout";
 import ProtectedRoute from "./components/ProtectedRoute";
 import { AuthProvider } from "./context/AuthContext.jsx";
+import FlashcardList from "./pages/FlashcardList";
 import Home from "./pages/Home";
 import Login from "./pages/Login";
 import Review from "./pages/Review";
@@ -27,6 +28,7 @@ export default function App() {
           >
             <Route path="/" element={<Home />} />
             <Route path="/review" element={<Review />} />
+            <Route path="/documents/:documentId/flashcards" element={<FlashcardList />} />
           </Route>
         </Routes>
       </BrowserRouter>

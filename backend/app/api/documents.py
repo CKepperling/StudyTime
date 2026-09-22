@@ -7,8 +7,10 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_current_user
 from app.db import get_db
 from app.models.document import Document
+from app.models.flashcard import Flashcard
 from app.models.user import User
 from app.schemas.document import DocumentOut
+from app.schemas.flashcard import FlashcardOut
 from app.storage import UPLOAD_DIR
 from app.workers.tasks import extract_document_text
 
@@ -93,3 +95,34 @@ def list_documents(
         .all()
     )
     return documents
+
+
+@router.get("/{document_id}/flashcards", response_model=list[FlashcardOut])
+def list_document_flashcards(
+    document_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Every flashcard generated from one of the current user's documents.
+
+    404s (rather than returning an empty list) when the document
+    itself doesn't exist or belongs to someone else - same reasoning
+    as flashcards.py's _get_owned_flashcard, so a caller can't tell
+    "no cards yet" apart from "not your document" by trying IDs.
+    """
+    document = db.get(Document, document_id)
+    if document is None or document.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Document not found"
+        )
+
+    flashcards = (
+        db.execute(
+            select(Flashcard)
+            .where(Flashcard.document_id == document_id)
+            .order_by(Flashcard.created_at.asc())
+        )
+        .scalars()
+        .all()
+    )
+    return flashcards
