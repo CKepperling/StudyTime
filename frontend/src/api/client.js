@@ -8,8 +8,14 @@ const TOKEN_KEY = "studytime_token";
 export async function apiFetch(path, options = {}) {
   const token = localStorage.getItem(TOKEN_KEY);
 
+  // A FormData body (file uploads) needs the browser to set its own
+  // Content-Type, including the multipart boundary string - setting
+  // "application/json" here like every other call would make the
+  // backend unable to parse the upload at all.
+  const isFormData = options.body instanceof FormData;
+
   const headers = {
-    "Content-Type": "application/json",
+    ...(isFormData ? {} : { "Content-Type": "application/json" }),
     ...options.headers,
   };
 
