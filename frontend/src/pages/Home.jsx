@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { listDocuments, uploadDocument } from "../api/documents";
 
 export default function Home() {
@@ -79,6 +80,7 @@ export default function Home() {
               <th style={thStyle}>Filename</th>
               <th style={thStyle}>Status</th>
               <th style={thStyle}>Uploaded</th>
+              <th style={thStyle}></th>
             </tr>
           </thead>
           <tbody>
@@ -87,6 +89,9 @@ export default function Home() {
                 <td style={tdStyle}>{doc.filename}</td>
                 <td style={tdStyle}>{doc.status}</td>
                 <td style={tdStyle}>{new Date(doc.created_at).toLocaleString()}</td>
+                <td style={tdStyle}>
+                  <Link to={`/documents/${doc.id}/flashcards`}>Flashcards</Link>
+                </td>
               </tr>
             ))}
           </tbody>
