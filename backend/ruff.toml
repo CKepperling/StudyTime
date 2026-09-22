@@ -24,5 +24,12 @@ ignore = ["FA100"]
 # route's signature rather than treating them as a normal shared
 # default, so this pattern is actually required, not a mistake.
 # Telling ruff Depends is "immutable" stops the false positive here
-# without disabling B008's real protection everywhere else.
-extend-immutable-calls = ["fastapi.Depends", "fastapi.params.Depends"]
+# without disabling B008's real protection everywhere else. File(...)
+# (used for upload endpoints) is the same FastAPI pattern for the
+# same reason.
+extend-immutable-calls = [
+    "fastapi.Depends",
+    "fastapi.params.Depends",
+    "fastapi.File",
+    "fastapi.params.File",
+]

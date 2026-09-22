@@ -38,6 +38,9 @@ pnpm-debug.log*
 postgres-data/
 redis-data/
 
+# --- Uploaded files (dev/local storage for the documents endpoint) ---
+backend/uploads/
+
 # --- IDE / editor ---
 .vscode/
 .idea/
