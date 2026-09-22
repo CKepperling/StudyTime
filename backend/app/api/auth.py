@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.api.deps import get_current_user
 from app.db import get_db
 from app.models.user import User
 from app.schemas.user import Token, UserCreate, UserLogin, UserOut
@@ -47,3 +48,15 @@ def login(credentials: UserLogin, db: Session = Depends(get_db)):
 
     token = create_access_token(subject=str(user.id))
     return Token(access_token=token)
+
+
+@router.get("/me", response_model=UserOut)
+def get_me(current_user: User = Depends(get_current_user)):
+    """Who am I, according to my auth token.
+
+    The frontend calls this once on app load (and again right after
+    login) to turn "I have a token" into "I know which user this is" -
+    get_current_user already does the actual verification, so this
+    endpoint is just handing back the user it resolved.
+    """
+    return current_user
