@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import TYPE_CHECKING, Optional
 
 from sqlalchemy import ForeignKey, String
@@ -24,7 +25,13 @@ class Document(Base):
     # This is what actually links a document to its owner in the database.
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
 
+    # filename is the ORIGINAL name the user uploaded with (what the UI
+    # shows them) - it's just for display, and two documents can share
+    # one. storage_path is the actual name it's saved under on disk
+    # (a UUID + ".pdf"), so uploads never collide or overwrite each
+    # other and a filename can't be crafted to read someone else's file.
     filename: Mapped[str] = mapped_column(String(255))
+    storage_path: Mapped[str] = mapped_column(String(255))
 
     # status tracks upload -> extraction -> AI generation progress.
     # Plain string for now; could become an Enum later like difficulty_level.
@@ -33,6 +40,8 @@ class Document(Base):
     # Optional[str] (not str | None) - the | union syntax needs Python 3.10+.
     # ruff.toml pins target-version to py39 so ruff stops suggesting X | Y here.
     extracted_text: Mapped[Optional[str]] = mapped_column(String)
+
+    created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
 
     # The other half of the relationship declared on User.
     # back_populates="documents" must match the attribute name on User exactly.
