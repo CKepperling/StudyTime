@@ -7,26 +7,10 @@ from pydantic import BaseModel
 
 GEMINI_API_KEY = os.environ["GEMINI_API_KEY"]
 
-# Flash, not Pro - per the team's earlier decision, Pro models sit
-# behind Google's paid tier now, while Flash stays free and is more
-# than capable for summarization/flashcard/test-question generation.
-#
-# Model names on Gemini move fast - gemini-2.5-flash was current when
-# this file was first written, and was already retired for new API
-# keys within weeks. If this model 404s again later with a message
-# telling you to use a different name, that's the fix: swap the
-# string below to whatever Google's own error message recommends.
 DEFAULT_MODEL = "gemini-3.6-flash"
 
-# One client, reused across every call - genai.Client() handles its
-# own connection pooling internally, so there's no benefit to
-# recreating it per request, and every module that imports this one
-# shares the same client instance.
 _client = genai.Client(api_key=GEMINI_API_KEY)
 
-# Bound to BaseModel so type checkers know generate_structured()
-# returns whatever specific Pydantic schema was passed in as
-# response_schema, not just "some BaseModel".
 SchemaT = TypeVar("SchemaT", bound=BaseModel)
 
 
