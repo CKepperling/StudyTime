@@ -85,3 +85,34 @@ def test_login_nonexistent_user_rejected():
     )
 
     assert response.status_code == 401
+
+
+def test_me_requires_auth():
+    # No Authorization header at all - should be rejected before it
+    # ever looks at a database.
+    response = client.get("/auth/me")
+
+    assert response.status_code == 401
+
+
+def test_me_rejects_garbage_token():
+    response = client.get(
+        "/auth/me", headers={"Authorization": "Bearer not-a-real-token"}
+    )
+
+    assert response.status_code == 401
+
+
+def test_me_returns_current_user(test_credentials):
+    client.post("/auth/signup", json=test_credentials)
+    login_response = client.post("/auth/login", json=test_credentials)
+    token = login_response.json()["access_token"]
+
+    response = client.get(
+        "/auth/me", headers={"Authorization": f"Bearer {token}"}
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["email"] == test_credentials["email"]
+    assert "hashed_password" not in body

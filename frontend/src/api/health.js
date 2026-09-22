@@ -1,9 +1,5 @@
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
+import { apiFetch } from "./client";
 
-export async function checkHealth() {
-  const response = await fetch(`${API_BASE_URL}/health`);
-  if (!response.ok) {
-    throw new Error(`Health check failed: ${response.status}`);
-  }
-  return response.json();
+export function checkHealth() {
+  return apiFetch("/health");
 }
