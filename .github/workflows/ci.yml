@@ -40,6 +40,10 @@ jobs:
     env:
       DATABASE_URL: postgresql://studytime:studytime@localhost:5432/studytime
       SECRET_KEY: ci-test-secret-key-not-for-production-use
+      # No Redis service running in this job, and none needed - eager
+      # mode makes .delay() run the Celery task synchronously in the
+      # same process instead of handing it to a broker/worker.
+      CELERY_TASK_ALWAYS_EAGER: "true"
     steps:
       - uses: actions/checkout@v4
 

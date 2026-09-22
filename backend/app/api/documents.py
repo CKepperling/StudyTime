@@ -1,6 +1,4 @@
-import os
 import uuid
-from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from sqlalchemy import select
@@ -11,19 +9,15 @@ from app.db import get_db
 from app.models.document import Document
 from app.models.user import User
 from app.schemas.document import DocumentOut
+from app.storage import UPLOAD_DIR
+from app.workers.tasks import extract_document_text
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 
-# Where uploaded PDFs actually live on disk. Configurable via env var
-# (a real deployment would point this at a mounted volume or object
-# storage) but defaults to a local "uploads" folder for dev/CI, same
-# spirit as DATABASE_URL falling back to nothing without one set.
-UPLOAD_DIR = Path(os.environ.get("UPLOAD_DIR", "uploads"))
-UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
-
 # Generous enough for lecture-slide PDFs; just a backstop against
-# someone filling the disk with one absurd upload. T18 (PDF text
-# extraction) may end up wanting its own, separate limit.
+# someone filling the disk with one absurd upload. The extraction
+# worker may end up wanting its own, separate limit for how much text
+# it's willing to process.
 MAX_UPLOAD_BYTES = 20 * 1024 * 1024  # 20 MB
 
 
@@ -68,6 +62,12 @@ async def upload_document(
     db.add(document)
     db.commit()
     db.refresh(document)
+
+    # Hand off to the Celery worker rather than extracting text inline
+    # here - a multi-page PDF can take real time to process, and this
+    # request shouldn't make the person wait on it just to get back
+    # "yes, I received your file."
+    extract_document_text.delay(document.id)
 
     return document
 
