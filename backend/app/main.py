@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.auth import router as auth_router
 from app.api.documents import router as documents_router
+from app.api.notes import router as notes_router
 
 app = FastAPI(title="StudyTime API")
 
@@ -18,6 +19,7 @@ app.add_middleware(
 # /auth/login exist in code but don't respond to anything.
 app.include_router(auth_router)
 app.include_router(documents_router)
+app.include_router(notes_router)
 
 
 @app.get("/health")
