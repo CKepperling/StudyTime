@@ -7,14 +7,18 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_current_user
 from app.db import get_db
 from app.models.document import Document
-from app.models.flashcard import Flashcard
+from app.models.flashcard import Flashcard, FlashcardSource
 from app.models.summary import Summary
 from app.models.user import User
 from app.schemas.document import DocumentOut
-from app.schemas.flashcard import FlashcardOut
+from app.schemas.flashcard import FlashcardCreate, FlashcardOut
 from app.schemas.summary import SummaryOut
 from app.storage import UPLOAD_DIR
-from app.workers.tasks import extract_document_text, generate_summaries
+from app.workers.tasks import (
+    extract_document_text,
+    generate_flashcards_task,
+    generate_summaries,
+)
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 
@@ -130,6 +134,42 @@ def list_document_flashcards(
     return flashcards
 
 
+@router.post(
+    "/{document_id}/flashcards",
+    response_model=FlashcardOut,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_manual_flashcard(
+    document_id: int,
+    flashcard_in: FlashcardCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Add a flashcard by hand to one of the current user's documents.
+
+    Marked FlashcardSource.MANUAL so a later "regenerate AI flashcards"
+    call (generate_flashcards_task) knows to leave this one alone
+    instead of deleting it along with the AI-generated set.
+    """
+    document = db.get(Document, document_id)
+    if document is None or document.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Document not found"
+        )
+
+    flashcard = Flashcard(
+        document_id=document_id,
+        front=flashcard_in.front,
+        back=flashcard_in.back,
+        source=FlashcardSource.MANUAL,
+    )
+    db.add(flashcard)
+    db.commit()
+    db.refresh(flashcard)
+
+    return flashcard
+
+
 @router.get("/{document_id}/summaries", response_model=list[SummaryOut])
 def list_document_summaries(
     document_id: int,
@@ -191,3 +231,32 @@ def trigger_summary_generation(
 
     generate_summaries.delay(document_id)
     return {"detail": "Summary generation started"}
+
+
+@router.post(
+    "/{document_id}/generate-flashcards", status_code=status.HTTP_202_ACCEPTED
+)
+def trigger_flashcard_generation(
+    document_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Manually kick off AI flashcard generation (or regeneration) for a
+    document - same manual-trigger reasoning as trigger_summary_generation
+    above. Regenerating replaces only the AI-generated cards; anything the
+    user added by hand through the manual-creation endpoint is untouched.
+    """
+    document = db.get(Document, document_id)
+    if document is None or document.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Document not found"
+        )
+
+    if not document.extracted_text:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Document text hasn't been extracted yet - try again shortly",
+        )
+
+    generate_flashcards_task.delay(document_id)
+    return {"detail": "Flashcard generation started"}
