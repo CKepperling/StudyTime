@@ -5,7 +5,7 @@ import { AuthProvider } from "./context/AuthContext.jsx";
 import FlashcardList from "./pages/FlashcardList";
 import Home from "./pages/Home";
 import Login from "./pages/Login";
-import Notes from "./pages/notes";
+import Notes from "./pages/Notes";
 import Review from "./pages/Review";
 import Signup from "./pages/Signup";
 
