@@ -8,11 +8,13 @@ from app.api.deps import get_current_user
 from app.db import get_db
 from app.models.document import Document
 from app.models.flashcard import Flashcard
+from app.models.summary import Summary
 from app.models.user import User
 from app.schemas.document import DocumentOut
 from app.schemas.flashcard import FlashcardOut
+from app.schemas.summary import SummaryOut
 from app.storage import UPLOAD_DIR
-from app.workers.tasks import extract_document_text
+from app.workers.tasks import extract_document_text, generate_summaries
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 
@@ -126,3 +128,66 @@ def list_document_flashcards(
         .all()
     )
     return flashcards
+
+
+@router.get("/{document_id}/summaries", response_model=list[SummaryOut])
+def list_document_summaries(
+    document_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Every summary generated for one of the current user's documents -
+    typically three rows (easy/medium/hard) once generation has run.
+
+    Same 404-not-empty-list reasoning as list_document_flashcards above:
+    a caller shouldn't be able to distinguish "no summaries yet" from
+    "not your document" by trying different ids.
+    """
+    document = db.get(Document, document_id)
+    if document is None or document.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Document not found"
+        )
+
+    summaries = (
+        db.execute(
+            select(Summary)
+            .where(Summary.document_id == document_id)
+            .order_by(Summary.created_at.asc())
+        )
+        .scalars()
+        .all()
+    )
+    return summaries
+
+
+@router.post(
+    "/{document_id}/generate-summaries", status_code=status.HTTP_202_ACCEPTED
+)
+def trigger_summary_generation(
+    document_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Manually kick off summary generation (or regeneration) for a document.
+
+    This is the deliberate "manual trigger" path instead of automatic
+    generation on every upload - see AUTO_GENERATE_SUMMARIES in
+    tasks.py for why. Calling this again after summaries already exist
+    replaces them (generate_summaries deletes the old set first), so
+    this endpoint doubles as "regenerate."
+    """
+    document = db.get(Document, document_id)
+    if document is None or document.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Document not found"
+        )
+
+    if not document.extracted_text:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Document text hasn't been extracted yet - try again shortly",
+        )
+
+    generate_summaries.delay(document_id)
+    return {"detail": "Summary generation started"}

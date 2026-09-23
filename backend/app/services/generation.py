@@ -7,10 +7,23 @@ from pydantic import BaseModel
 
 GEMINI_API_KEY = os.environ["GEMINI_API_KEY"]
 
-DEFAULT_MODEL = "gemini-3.6-flash"
+DEFAULT_MODEL = os.environ.get("GENERATION_MODEL", "gemini-3.5-flash-lite")
 
-_client = genai.Client(api_key=GEMINI_API_KEY)
 
+_REQUEST_TIMEOUT_MS = 30_000
+
+# One client, reused across every call - genai.Client() handles its
+# own connection pooling internally, so there's no benefit to
+# recreating it per request, and every module that imports this one
+# shares the same client instance.
+_client = genai.Client(
+    api_key=GEMINI_API_KEY,
+    http_options=types.HttpOptions(timeout=_REQUEST_TIMEOUT_MS),
+)
+
+# Bound to BaseModel so type checkers know generate_structured()
+# returns whatever specific Pydantic schema was passed in as
+# response_schema, not just "some BaseModel".
 SchemaT = TypeVar("SchemaT", bound=BaseModel)
 
 
