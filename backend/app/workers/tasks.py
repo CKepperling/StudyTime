@@ -63,9 +63,9 @@ def extract_document_text(document_id: int) -> None:
         # api/documents.py) so uploading a document during testing
         # doesn't silently spend 3 calls every time. Flip this to
         # "true" before a demo for the nicer automatic experience.
-        if os.environ.get("AUTO_GENERATE_SUMMARIES", "false").lower() == "true":
-            if document.status == "extracted":
-                generate_summaries.delay(document_id)
+        auto_generate = os.environ.get("AUTO_GENERATE_SUMMARIES", "false").lower() == "true"
+        if auto_generate and document.status == "extracted":
+            generate_summaries.delay(document_id)
     finally:
         db.close()
 
