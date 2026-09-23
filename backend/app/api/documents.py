@@ -103,6 +103,27 @@ def list_documents(
     return documents
 
 
+@router.get("/{document_id}", response_model=DocumentOut)
+def get_document(
+    document_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """A single document's own status/metadata - what the document
+    detail page loads first, before its summaries and flashcards.
+
+    Same 404-not-empty-list reasoning as the other per-document
+    endpoints below: a caller can't tell "doesn't exist" apart from
+    "not yours" by trying different ids.
+    """
+    document = db.get(Document, document_id)
+    if document is None or document.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Document not found"
+        )
+    return document
+
+
 @router.get("/{document_id}/flashcards", response_model=list[FlashcardOut])
 def list_document_flashcards(
     document_id: int,

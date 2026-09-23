@@ -146,3 +146,61 @@ def test_list_documents_empty_for_new_user(auth_headers):
 
     assert response.status_code == 200
     assert response.json() == []
+
+
+# ============================================================
+# GET /documents/{id} - single document detail
+# ============================================================
+
+
+def test_get_document_requires_auth():
+    response = client.get("/documents/1")
+
+    assert response.status_code == 401
+
+
+def test_get_document_returns_own_document(auth_headers):
+    upload = client.post(
+        "/documents",
+        files={"file": ("lecture-notes.pdf", FAKE_PDF_BYTES, "application/pdf")},
+        headers=auth_headers,
+    )
+    document_id = upload.json()["id"]
+
+    response = client.get(f"/documents/{document_id}", headers=auth_headers)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["id"] == document_id
+    assert body["filename"] == "lecture-notes.pdf"
+
+
+def test_get_document_404s_for_nonexistent_document(auth_headers):
+    response = client.get("/documents/999999999", headers=auth_headers)
+
+    assert response.status_code == 404
+
+
+def test_get_document_404s_for_other_users_document(auth_headers):
+    other_email, other_token = _create_user_and_token(client)
+    other_headers = {"Authorization": f"Bearer {other_token}"}
+
+    try:
+        upload = client.post(
+            "/documents",
+            files={"file": ("someone-elses.pdf", FAKE_PDF_BYTES, "application/pdf")},
+            headers=other_headers,
+        )
+        other_document_id = upload.json()["id"]
+
+        response = client.get(f"/documents/{other_document_id}", headers=auth_headers)
+
+        assert response.status_code == 404
+    finally:
+        db = SessionLocal()
+        other_user = db.query(User).filter(User.email == other_email).first()
+        if other_user is not None:
+            db.query(Document).filter(Document.user_id == other_user.id).delete()
+            db.query(User).filter(User.id == other_user.id).delete()
+            db.commit()
+        db.close()
