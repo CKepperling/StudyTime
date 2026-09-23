@@ -22,6 +22,16 @@ class FlashcardOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class FlashcardCreate(BaseModel):
+    """Body for manually creating a flashcard by hand - just the two
+    fields a person types in; everything else (source, SM-2 scheduling
+    state) is filled in server-side, same as an AI-generated card.
+    """
+
+    front: str = Field(min_length=1, max_length=2000)
+    back: str = Field(min_length=1, max_length=2000)
+
+
 class ReviewIn(BaseModel):
     """Body of a review submission - just the grade the user picked."""
 

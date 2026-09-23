@@ -145,3 +145,86 @@ def test_list_flashcards_requires_auth(user_and_headers):
     response = client.get(f"/documents/{document_id}/flashcards")
 
     assert response.status_code == 401
+
+
+# ============================================================
+# POST /documents/{id}/flashcards - manual creation
+# ============================================================
+
+
+def test_create_manual_flashcard_returns_created_card(user_and_headers):
+    user_id, headers = user_and_headers
+    document_id = _make_document(user_id)
+
+    response = client.post(
+        f"/documents/{document_id}/flashcards",
+        json={"front": "What is SM-2?", "back": "A spaced-repetition algorithm."},
+        headers=headers,
+    )
+
+    assert response.status_code == 201
+    body = response.json()
+    assert body["front"] == "What is SM-2?"
+    assert body["back"] == "A spaced-repetition algorithm."
+    assert body["source"] == "manual"
+    # New manual cards get the same default scheduling state as any
+    # other flashcard - due immediately, at the standard starting ease.
+    assert body["repetitions"] == 0
+    assert body["ease_factor"] == 2.5
+
+
+def test_create_manual_flashcard_persists_to_document(user_and_headers):
+    user_id, headers = user_and_headers
+    document_id = _make_document(user_id)
+
+    client.post(
+        f"/documents/{document_id}/flashcards",
+        json={"front": "Q", "back": "A"},
+        headers=headers,
+    )
+
+    response = client.get(f"/documents/{document_id}/flashcards", headers=headers)
+    cards = response.json()
+    assert len(cards) == 1
+    assert cards[0]["source"] == "manual"
+
+
+def test_create_manual_flashcard_404s_for_other_users_document(user_and_headers):
+    _, headers = user_and_headers
+    other_user_id, _token = _create_user_and_token()
+    other_document_id = _make_document(other_user_id)
+
+    response = client.post(
+        f"/documents/{other_document_id}/flashcards",
+        json={"front": "Q", "back": "A"},
+        headers=headers,
+    )
+
+    assert response.status_code == 404
+
+    _delete_user_and_their_data(other_user_id)
+
+
+def test_create_manual_flashcard_rejects_empty_front(user_and_headers):
+    user_id, headers = user_and_headers
+    document_id = _make_document(user_id)
+
+    response = client.post(
+        f"/documents/{document_id}/flashcards",
+        json={"front": "", "back": "A"},
+        headers=headers,
+    )
+
+    assert response.status_code == 422
+
+
+def test_create_manual_flashcard_requires_auth(user_and_headers):
+    user_id, _headers = user_and_headers
+    document_id = _make_document(user_id)
+
+    response = client.post(
+        f"/documents/{document_id}/flashcards",
+        json={"front": "Q", "back": "A"},
+    )
+
+    assert response.status_code == 401

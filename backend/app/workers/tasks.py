@@ -5,7 +5,9 @@ from pypdf.errors import PdfReadError
 
 from app.db import SessionLocal
 from app.models.document import Document
+from app.models.flashcard import Flashcard, FlashcardSource
 from app.models.summary import DifficultyLevel, Summary
+from app.services.flashcard_generation import generate_flashcards
 from app.services.summary import generate_summary
 from app.storage import UPLOAD_DIR
 from app.workers.celery_app import celery_app
@@ -66,6 +68,12 @@ def extract_document_text(document_id: int) -> None:
         auto_generate = os.environ.get("AUTO_GENERATE_SUMMARIES", "false").lower() == "true"
         if auto_generate and document.status == "extracted":
             generate_summaries.delay(document_id)
+
+        auto_generate_cards = (
+            os.environ.get("AUTO_GENERATE_FLASHCARDS", "false").lower() == "true"
+        )
+        if auto_generate_cards and document.status == "extracted":
+            generate_flashcards_task.delay(document_id)
     finally:
         db.close()
 
@@ -102,6 +110,50 @@ def generate_summaries(document_id: int) -> None:
                     document_id=document_id,
                     difficulty_level=level,
                     content=content,
+                )
+            )
+
+        db.commit()
+    finally:
+        db.close()
+
+
+@celery_app.task(name="generate_flashcards_task")
+def generate_flashcards_task(document_id: int) -> None:
+    """Generate a set of AI flashcards for a document.
+
+    Same "generate or regenerate" duality as generate_summaries above:
+    this one task is chained automatically after extraction (if
+    AUTO_GENERATE_FLASHCARDS is on) and is also what the manual
+    POST /generate-flashcards endpoint calls directly.
+
+    Only AI-generated cards for this document are deleted before
+    regenerating - any cards the user added by hand (FlashcardSource.MANUAL,
+    from T13.5's manual-creation endpoint) are left alone. Wiping those
+    out just because someone clicked "regenerate flashcards" would throw
+    away work the user typed themselves.
+    """
+    db = SessionLocal()
+    try:
+        document = db.get(Document, document_id)
+        if document is None or not document.extracted_text:
+            # Nothing to generate from - either the document's gone, or
+            # extraction hasn't produced usable text yet.
+            return
+
+        db.query(Flashcard).filter(
+            Flashcard.document_id == document_id,
+            Flashcard.source == FlashcardSource.AI_GENERATED,
+        ).delete()
+
+        cards = generate_flashcards(document.extracted_text)
+        for card in cards:
+            db.add(
+                Flashcard(
+                    document_id=document_id,
+                    front=card.front,
+                    back=card.back,
+                    source=FlashcardSource.AI_GENERATED,
                 )
             )
 
