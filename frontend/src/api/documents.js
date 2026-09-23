@@ -13,3 +13,17 @@ export function uploadDocument(file) {
     body: formData,
   });
 }
+
+export function getDocument(documentId) {
+  return apiFetch(`/documents/${documentId}`);
+}
+
+export function listSummariesForDocument(documentId) {
+  return apiFetch(`/documents/${documentId}/summaries`);
+}
+
+export function generateSummaries(documentId) {
+  return apiFetch(`/documents/${documentId}/generate-summaries`, {
+    method: "POST",
+  });
+}

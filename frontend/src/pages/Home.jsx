@@ -86,7 +86,9 @@ export default function Home() {
           <tbody>
             {documents.map((doc) => (
               <tr key={doc.id} style={{ borderBottom: "1px solid var(--border)" }}>
-                <td style={tdStyle}>{doc.filename}</td>
+                <td style={tdStyle}>
+                  <Link to={`/documents/${doc.id}`}>{doc.filename}</Link>
+                </td>
                 <td style={tdStyle}>{doc.status}</td>
                 <td style={tdStyle}>{new Date(doc.created_at).toLocaleString()}</td>
                 <td style={tdStyle}>
