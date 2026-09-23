@@ -91,6 +91,8 @@ export default function Home() {
                 <td style={tdStyle}>{new Date(doc.created_at).toLocaleString()}</td>
                 <td style={tdStyle}>
                   <Link to={`/documents/${doc.id}/flashcards`}>Flashcards</Link>
+                  {" · "}
+                  <Link to={`/documents/${doc.id}/notes`}>Notes</Link>
                 </td>
               </tr>
             ))}
