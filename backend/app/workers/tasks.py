@@ -1,8 +1,12 @@
+import os
+
 from pypdf import PdfReader
 from pypdf.errors import PdfReadError
 
 from app.db import SessionLocal
 from app.models.document import Document
+from app.models.summary import DifficultyLevel, Summary
+from app.services.summary import generate_summary
 from app.storage import UPLOAD_DIR
 from app.workers.celery_app import celery_app
 
@@ -50,6 +54,57 @@ def extract_document_text(document_id: int) -> None:
         # T31 (non-PDF/OCR support) is the eventual fix for it, not a bug
         # in this task.
         document.status = "extracted" if text.strip() else "no_text_found"
+        db.commit()
+
+        # Off by default - see AUTO_GENERATE_SUMMARIES in .env.example.
+        # While the team's Gemini key is capped at a tight free-tier
+        # daily quota, summaries are triggered manually instead (the
+        # POST /documents/{id}/generate-summaries endpoint in
+        # api/documents.py) so uploading a document during testing
+        # doesn't silently spend 3 calls every time. Flip this to
+        # "true" before a demo for the nicer automatic experience.
+        if os.environ.get("AUTO_GENERATE_SUMMARIES", "false").lower() == "true":
+            if document.status == "extracted":
+                generate_summaries.delay(document_id)
+    finally:
+        db.close()
+
+
+@celery_app.task(name="generate_summaries")
+def generate_summaries(document_id: int) -> None:
+    """Generate one Summary row per difficulty level for a document.
+
+    This single task covers BOTH "generate for the first time" (chained
+    automatically after extraction, if AUTO_GENERATE_SUMMARIES is on)
+    and "regenerate" (the manual POST /generate-summaries endpoint calls
+    this exact same task) - there's no separate regenerate code path.
+
+    Existing summaries for this document are deleted first, so calling
+    this a second time replaces the old easy/medium/hard set rather than
+    piling up duplicate rows alongside them.
+    """
+    db = SessionLocal()
+    try:
+        document = db.get(Document, document_id)
+        if document is None or not document.extracted_text:
+            # Nothing to summarize - either the document's gone, or
+            # extraction hasn't produced usable text yet (still
+            # pending/processing, or landed on no_text_found /
+            # extraction_failed instead of extracted).
+            return
+
+        db.query(Summary).filter(Summary.document_id == document_id).delete()
+
+        for level in DifficultyLevel:
+            content = generate_summary(document.extracted_text, level)
+            db.add(
+                Summary(
+                    document_id=document_id,
+                    difficulty_level=level,
+                    content=content,
+                )
+            )
+
         db.commit()
     finally:
         db.close()
