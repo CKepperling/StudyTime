@@ -27,3 +27,13 @@ export function generateSummaries(documentId) {
     method: "POST",
   });
 }
+
+export function listPracticeTestsForDocument(documentId) {
+  return apiFetch(`/documents/${documentId}/practice-tests`);
+}
+
+export function generatePracticeTest(documentId) {
+  return apiFetch(`/documents/${documentId}/generate-practice-test`, {
+    method: "POST",
+  });
+}

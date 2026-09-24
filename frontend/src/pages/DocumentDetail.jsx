@@ -4,6 +4,8 @@ import {
   generateSummaries,
   getDocument,
   listSummariesForDocument,
+  listPracticeTestsForDocument,
+  generatePracticeTest,
 } from "../api/documents";
 
 const LEVEL_LABELS = {
@@ -19,6 +21,7 @@ export default function DocumentDetail() {
 
   const [document, setDocument] = useState(null);
   const [summaries, setSummaries] = useState([]);
+  const [practiceTests, setPracticeTests] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(null);
   const [refreshCount, setRefreshCount] = useState(0);
@@ -27,13 +30,22 @@ export default function DocumentDetail() {
   const [generateError, setGenerateError] = useState(null);
   const [generateMessage, setGenerateMessage] = useState(null);
 
+  const [generatingTest, setGeneratingTest] = useState(false);
+  const [generateTestError, setGenerateTestError] = useState(null);
+  const [generateTestMessage, setGenerateTestMessage] = useState(null);
+
   const [activeLevel, setActiveLevel] = useState("medium");
 
   useEffect(() => {
-    Promise.all([getDocument(documentId), listSummariesForDocument(documentId)])
-      .then(([doc, docSummaries]) => {
+    Promise.all([
+      getDocument(documentId),
+      listSummariesForDocument(documentId),
+      listPracticeTestsForDocument(documentId),
+    ])
+      .then(([doc, docSummaries, docPracticeTests]) => {
         setDocument(doc);
         setSummaries(docSummaries);
+        setPracticeTests(docPracticeTests);
         setLoadError(null);
       })
       .catch((err) => setLoadError(err.message))
@@ -65,6 +77,28 @@ export default function DocumentDetail() {
     (summary) => summary.difficulty_level === activeLevel
   );
 
+  async function handleGenerateTest() {
+    setGeneratingTest(true);
+    setGenerateTestError(null);
+    setGenerateTestMessage(null);
+
+    try {
+      await generatePracticeTest(documentId);
+      setGenerateTestMessage(
+        "Generation started — this can take a few seconds. Refreshing…"
+      );
+      setTimeout(() => setRefreshCount((count) => count + 1), 4000);
+    } catch (err) {
+      setGenerateTestError(err.message);
+    } finally {
+      setGeneratingTest(false);
+    }
+  }
+
+  // In practice zero or one - regenerating replaces the existing test
+  // rather than adding another, per the backend's own comment.
+  const practiceTest = practiceTests[0];
+
   return (
     <div>
       <Link to="/" style={backLinkStyle}>
@@ -85,6 +119,9 @@ export default function DocumentDetail() {
           <div style={{ display: "flex", gap: 12, marginBottom: 24 }}>
             <Link to={`/documents/${documentId}/flashcards`} style={linkButtonStyle}>
               View flashcards
+            </Link>
+            <Link to={`/documents/${documentId}/notes`} style={linkButtonStyle}>
+              Notes
             </Link>
           </div>
 
@@ -151,6 +188,57 @@ export default function DocumentDetail() {
                       </p>
                     )}
                   </>
+                )}
+              </>
+            )}
+          </div>
+
+          <div style={{ marginTop: 32 }}>
+            <h2 style={{ fontSize: 18, marginBottom: 12 }}>Practice Test</h2>
+
+            {document.status !== "extracted" && (
+              <p style={{ fontSize: 14, color: "var(--muted, #888)" }}>
+                A practice test can be generated once text extraction finishes
+                (current status: {document.status}).
+              </p>
+            )}
+
+            {document.status === "extracted" && (
+              <>
+                <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
+                  <button
+                    onClick={handleGenerateTest}
+                    disabled={generatingTest}
+                    style={buttonStyle}
+                  >
+                    {generatingTest
+                      ? "Starting…"
+                      : practiceTest
+                        ? "Regenerate test"
+                        : "Generate practice test"}
+                  </button>
+                  {generateTestMessage && (
+                    <span style={{ fontSize: 14, color: "var(--accent)" }}>
+                      {generateTestMessage}
+                    </span>
+                  )}
+                </div>
+                {generateTestError && (
+                  <p style={{ color: "#9c3b2c", fontSize: 14, marginBottom: 16 }}>
+                    {generateTestError}
+                  </p>
+                )}
+
+                {!practiceTest && <p>No practice test yet — generate one above.</p>}
+
+                {practiceTest && (
+                  <p>
+                    {practiceTest.question_count} question
+                    {practiceTest.question_count === 1 ? "" : "s"} ready.{" "}
+                    <Link to={`/practice-tests/${practiceTest.id}`} style={{ color: "var(--accent)" }}>
+                      Take the test →
+                    </Link>
+                  </p>
                 )}
               </>
             )}
