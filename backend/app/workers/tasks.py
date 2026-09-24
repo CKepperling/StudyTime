@@ -6,8 +6,10 @@ from pypdf.errors import PdfReadError
 from app.db import SessionLocal
 from app.models.document import Document
 from app.models.flashcard import Flashcard, FlashcardSource
+from app.models.practice_test import PracticeTest, TestQuestion
 from app.models.summary import DifficultyLevel, Summary
 from app.services.flashcard_generation import generate_flashcards
+from app.services.practice_test_generation import generate_practice_test_questions
 from app.services.summary import generate_summary
 from app.storage import UPLOAD_DIR
 from app.workers.celery_app import celery_app
@@ -74,6 +76,12 @@ def extract_document_text(document_id: int) -> None:
         )
         if auto_generate_cards and document.status == "extracted":
             generate_flashcards_task.delay(document_id)
+
+        auto_generate_test = (
+            os.environ.get("AUTO_GENERATE_PRACTICE_TESTS", "false").lower() == "true"
+        )
+        if auto_generate_test and document.status == "extracted":
+            generate_practice_test_task.delay(document_id)
     finally:
         db.close()
 
@@ -154,6 +162,64 @@ def generate_flashcards_task(document_id: int) -> None:
                     front=card.front,
                     back=card.back,
                     source=FlashcardSource.AI_GENERATED,
+                )
+            )
+
+        db.commit()
+    finally:
+        db.close()
+
+
+@celery_app.task(name="generate_practice_test_task")
+def generate_practice_test_task(document_id: int) -> None:
+    """Generate a fresh practice test (a PracticeTest plus its TestQuestion
+    rows) for a document.
+
+    Same "generate or regenerate" duality as generate_summaries and
+    generate_flashcards_task above - chained automatically after
+    extraction (if AUTO_GENERATE_PRACTICE_TESTS is on) and also what the
+    manual POST /generate-practice-test endpoint calls directly.
+
+    Unlike flashcards, a practice test has no manually-created rows to
+    preserve, so regenerating simply replaces the document's existing
+    test(s) wholesale. TestQuestion rows are deleted before their parent
+    PracticeTest rows - there's no ON DELETE CASCADE on the FK, and no
+    cascade configured on the ORM relationship either, so deleting a
+    PracticeTest first would violate the foreign key.
+    """
+    db = SessionLocal()
+    try:
+        document = db.get(Document, document_id)
+        if document is None or not document.extracted_text:
+            # Nothing to generate from - either the document's gone, or
+            # extraction hasn't produced usable text yet.
+            return
+
+        existing_test_ids = [
+            row[0]
+            for row in db.query(PracticeTest.id)
+            .filter(PracticeTest.document_id == document_id)
+            .all()
+        ]
+        if existing_test_ids:
+            db.query(TestQuestion).filter(
+                TestQuestion.practice_test_id.in_(existing_test_ids)
+            ).delete(synchronize_session=False)
+            db.query(PracticeTest).filter(
+                PracticeTest.document_id == document_id
+            ).delete(synchronize_session=False)
+
+        practice_test = PracticeTest(document_id=document_id)
+        db.add(practice_test)
+        db.flush()  # assigns practice_test.id for the questions below
+
+        questions = generate_practice_test_questions(document.extracted_text)
+        for question in questions:
+            db.add(
+                TestQuestion(
+                    practice_test_id=practice_test.id,
+                    question=question.question,
+                    correct_answer=question.correct_answer,
                 )
             )
 
