@@ -127,6 +127,47 @@ def get_document(
     return document
 
 
+@router.delete("/{document_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_document(
+    document_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Delete a document and everything generated from it.
+
+    db.delete(document) alone is enough to remove every summary,
+    flashcard (and each flashcard's own review_logs), note, and
+    practice test (and each test's own questions) too - see the
+    cascade="all, delete-orphan" set on Document's relationships
+    (and Flashcard.review_logs, PracticeTest.questions) in the
+    models. Nothing here has to manually delete four tables in the
+    right order itself.
+
+    The progress dashboard needs no separate cleanup either - it
+    computes its stats live from these same tables on every request
+    (see services/progress.py), so once the underlying rows are gone,
+    the next dashboard load simply reflects that automatically.
+
+    The uploaded file on disk is a separate thing the database cascade
+    can't touch, so it's removed explicitly, best-effort - if it's
+    already missing for some reason, that's not a reason to fail the
+    whole delete.
+    """
+    document = db.get(Document, document_id)
+    if document is None or document.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Document not found"
+        )
+
+    try:
+        (UPLOAD_DIR / document.storage_path).unlink()
+    except FileNotFoundError:
+        pass
+
+    db.delete(document)
+    db.commit()
+
+
 @router.get("/{document_id}/flashcards", response_model=list[FlashcardOut])
 def list_document_flashcards(
     document_id: int,
