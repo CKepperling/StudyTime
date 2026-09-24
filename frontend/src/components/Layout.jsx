@@ -27,6 +27,9 @@ export default function Layout() {
           <NavLink to="/review" style={navLinkStyle}>
             Review queue
           </NavLink>
+          <NavLink to="/progress" style={navLinkStyle}>
+            Progress
+          </NavLink>
         </nav>
 
         {/* marginTop: auto pushes this to the bottom of the sidebar,
