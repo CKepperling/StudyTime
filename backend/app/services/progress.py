@@ -137,9 +137,14 @@ def _compute_streak(db: Session, user_id: int, today: date) -> int:
         .all()
     )
     # Some DB drivers return date objects, others return strings -
-    # normalize so the comparisons below always work the same way.
+    # normalize so the comparisons below always work the same way. A
+    # plain calendar date has no timezone component to preserve here,
+    # so naive is correct, not an oversight - same reasoning as the
+    # naive datetime.utcnow() calls elsewhere in this file.
     dates = {
-        d if isinstance(d, date) else datetime.strptime(d, "%Y-%m-%d").date()
+        d
+        if isinstance(d, date)
+        else datetime.strptime(d, "%Y-%m-%d").date()  # noqa: DTZ007
         for d in review_dates
     }
 
