@@ -8,15 +8,18 @@ from app.api.deps import get_current_user
 from app.db import get_db
 from app.models.document import Document
 from app.models.flashcard import Flashcard, FlashcardSource
+from app.models.practice_test import PracticeTest
 from app.models.summary import Summary
 from app.models.user import User
 from app.schemas.document import DocumentOut
 from app.schemas.flashcard import FlashcardCreate, FlashcardOut
+from app.schemas.practice_test import PracticeTestSummaryOut
 from app.schemas.summary import SummaryOut
 from app.storage import UPLOAD_DIR
 from app.workers.tasks import (
     extract_document_text,
     generate_flashcards_task,
+    generate_practice_test_task,
     generate_summaries,
 )
 
@@ -281,3 +284,72 @@ def trigger_flashcard_generation(
 
     generate_flashcards_task.delay(document_id)
     return {"detail": "Flashcard generation started"}
+
+
+@router.get(
+    "/{document_id}/practice-tests", response_model=list[PracticeTestSummaryOut]
+)
+def list_document_practice_tests(
+    document_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Every practice test generated for one of the current user's
+    documents - in practice just zero or one, since regenerating
+    replaces the existing test rather than piling up new ones, but a
+    list keeps this consistent with list_document_summaries/flashcards
+    above and leaves room for a future "test history" feature.
+    """
+    document = db.get(Document, document_id)
+    if document is None or document.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Document not found"
+        )
+
+    practice_tests = (
+        db.execute(
+            select(PracticeTest)
+            .where(PracticeTest.document_id == document_id)
+            .order_by(PracticeTest.created_at.desc())
+        )
+        .scalars()
+        .all()
+    )
+    return [
+        PracticeTestSummaryOut(
+            id=test.id,
+            document_id=test.document_id,
+            created_at=test.created_at,
+            question_count=len(test.questions),
+        )
+        for test in practice_tests
+    ]
+
+
+@router.post(
+    "/{document_id}/generate-practice-test", status_code=status.HTTP_202_ACCEPTED
+)
+def trigger_practice_test_generation(
+    document_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Manually kick off practice test generation (or regeneration) for a
+    document - same manual-trigger reasoning as trigger_summary_generation
+    and trigger_flashcard_generation above. Calling this again replaces
+    the document's existing practice test with a brand new one.
+    """
+    document = db.get(Document, document_id)
+    if document is None or document.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Document not found"
+        )
+
+    if not document.extracted_text:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Document text hasn't been extracted yet - try again shortly",
+        )
+
+    generate_practice_test_task.delay(document_id)
+    return {"detail": "Practice test generation started"}
