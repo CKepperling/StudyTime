@@ -7,6 +7,7 @@ import FlashcardList from "./pages/FlashcardList";
 import Home from "./pages/Home";
 import Login from "./pages/Login";
 import Notes from "./pages/Notes";
+import Progress from "./pages/Progress";
 import Review from "./pages/Review";
 import Signup from "./pages/Signup";
 
@@ -30,6 +31,7 @@ export default function App() {
           >
             <Route path="/" element={<Home />} />
             <Route path="/review" element={<Review />} />
+            <Route path="/progress" element={<Progress />} />
             <Route path="/documents/:documentId" element={<DocumentDetail />} />
             <Route path="/documents/:documentId/flashcards" element={<FlashcardList />} />
             <Route path="/documents/:documentId/notes" element={<Notes />} />
