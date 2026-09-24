@@ -18,6 +18,10 @@ export function getDocument(documentId) {
   return apiFetch(`/documents/${documentId}`);
 }
 
+export function deleteDocument(documentId) {
+  return apiFetch(`/documents/${documentId}`, { method: "DELETE" });
+}
+
 export function listSummariesForDocument(documentId) {
   return apiFetch(`/documents/${documentId}/summaries`);
 }

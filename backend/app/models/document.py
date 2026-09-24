@@ -50,7 +50,23 @@ class Document(Base):
     # Every one of these mirrors a relationship declared on the OTHER model,
     # pointing back here. back_populates on each side must name the attribute
     # on the opposite class exactly, or SQLAlchemy errors at app startup.
-    summaries: Mapped[list["Summary"]] = relationship(back_populates="document")
-    flashcards: Mapped[list["Flashcard"]] = relationship(back_populates="document")
-    notes: Mapped[list["Note"]] = relationship(back_populates="document")
-    practice_tests: Mapped[list["PracticeTest"]] = relationship(back_populates="document")
+    #
+    # cascade="all, delete-orphan" on all four: a Summary/Flashcard/Note/
+    # PracticeTest has no reason to exist once its Document is gone - this
+    # is what lets DELETE /documents/{id} just db.delete(document) and have
+    # everything hanging off it (including flashcards' own review_logs, and
+    # practice tests' own questions, via their OWN cascade settings) removed
+    # automatically, instead of hitting a foreign key violation or requiring
+    # this endpoint to manually delete four tables in the right order itself.
+    summaries: Mapped[list["Summary"]] = relationship(
+        back_populates="document", cascade="all, delete-orphan"
+    )
+    flashcards: Mapped[list["Flashcard"]] = relationship(
+        back_populates="document", cascade="all, delete-orphan"
+    )
+    notes: Mapped[list["Note"]] = relationship(
+        back_populates="document", cascade="all, delete-orphan"
+    )
+    practice_tests: Mapped[list["PracticeTest"]] = relationship(
+        back_populates="document", cascade="all, delete-orphan"
+    )

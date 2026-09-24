@@ -22,7 +22,11 @@ class PracticeTest(Base):
     # One PracticeTest has many TestQuestions - this is the "many" side.
     # No TYPE_CHECKING import needed for "TestQuestion" since it's defined
     # further down in this SAME file, so it's already in module scope.
-    questions: Mapped[list["TestQuestion"]] = relationship(back_populates="practice_test")
+    # cascade="all, delete-orphan": a question has no meaning without its
+    # test, same reasoning as Document's children and Flashcard's review_logs.
+    questions: Mapped[list["TestQuestion"]] = relationship(
+        back_populates="practice_test", cascade="all, delete-orphan"
+    )
 
 
 class TestQuestion(Base):

@@ -41,4 +41,9 @@ class Flashcard(Base):
     created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
 
     document: Mapped["Document"] = relationship(back_populates="flashcards")
-    review_logs: Mapped[list["ReviewLog"]] = relationship(back_populates="flashcard")
+    # A ReviewLog only exists to record a review OF this flashcard - it
+    # has no meaning once the flashcard itself is gone, so it cascades
+    # the same way Document's children do above.
+    review_logs: Mapped[list["ReviewLog"]] = relationship(
+        back_populates="flashcard", cascade="all, delete-orphan"
+    )
