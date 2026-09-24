@@ -5,6 +5,7 @@ from app.api.auth import router as auth_router
 from app.api.documents import router as documents_router
 from app.api.flashcards import router as flashcards_router
 from app.api.notes import router as notes_router
+from app.api.progress import router as progress_router
 
 app = FastAPI(title="StudyTime API")
 
@@ -22,6 +23,7 @@ app.include_router(auth_router)
 app.include_router(documents_router)
 app.include_router(notes_router)
 app.include_router(flashcards_router)
+app.include_router(progress_router)
 
 
 @app.get("/health")
