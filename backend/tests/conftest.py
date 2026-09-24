@@ -26,7 +26,7 @@ import tempfile
 _TEST_UPLOAD_DIR = tempfile.mkdtemp(prefix="studytime-test-uploads-")
 os.environ["UPLOAD_DIR"] = _TEST_UPLOAD_DIR
 
-import pytest  # noqa: E402 (must come after the os.environ line above)
+import pytest
 
 
 @pytest.fixture(scope="session", autouse=True)
