@@ -1,87 +1,217 @@
 # StudyTime
 
-> Upload your lecture notes and papers. Get AI-generated summaries, flashcards, and practice tests. Review flashcards with spaced repetition, backed by a system that actually knows what you've forgotten.
+> Upload your lecture slides and papers. Get AI-generated summaries, flashcards, and practice tests. Review them on a spaced-repetition schedule so you study each card right before you'd forget it.
 
-## What It Does
+Built for CS 3704 at Virginia Tech.
 
-1. **Sign up / log in** — JWT-based auth; every document, note, flashcard, and test belongs to one user and is never visible to another.
-2. **Upload** a PDF (lecture slides, notes, or a paper).
-3. **Extraction** — a background worker pulls the raw text out of the PDF automatically after upload.
-4. **Summarize** — generate a summary at easy, medium, or hard reading level (one Gemini call per level), and switch between them on the document page.
-5. **Generate flashcards** — key concepts are turned into question/answer pairs automatically, or add your own by hand.
-6. **Review** — flashcards are scheduled using the SM-2 spaced-repetition algorithm, so you review things right before you'd forget them.
-7. **Practice tests** — generate a short-answer test from a document, take it, and get it graded instantly with a per-question breakdown.
-8. **Quick notes** — a simple freeform notes panel on each document, independent of anything AI-generated.
-9. **Track progress** — a dashboard shows what's due, retention trends, and totals across everything you've studied.
-10. **Delete a document** — removes it and everything generated from it (summaries, flashcards, notes, practice tests, and their own review history) in one action.
+## Team
+
+| Name | PID | Email | GitHub |
+|---|---|---|---|
+| Clayton Kepperling | ckepperling86 | ckepperling86@vt.edu | [@CKepperling](https://github.com/CKepperling) |
+| Tristan Livingood | tscottlivingood3 | tscottlivingood3@vt.edu | [@TristanLivingood](https://github.com/TristanLivingood) |
+
+## The Problem
+
+Students accumulate hundreds of pages of lecture slides, notes, and readings each semester, but rarely revisit them in a way that builds long-term retention. Existing tools only solve pieces of the problem: PDF readers don't summarize, summarizers don't quiz you, and flashcard apps (Anki, Quizlet) make you write every card by hand. There is no single tool that takes raw course material in and produces a structured, spaced-repetition-ready study system out.
+
+## What StudyTime Does
+
+1. **Upload** a PDF (lecture slides, notes, or a paper). Text is extracted in the background.
+2. **Summarize** the material at three difficulty levels.
+3. **Generate flashcards** from the key concepts, or write your own by hand.
+4. **Review** due cards using the SM-2 spaced-repetition algorithm. Each grade you give reschedules the card.
+5. **Practice** with an AI-generated multiple-choice test and get scored instantly (tests can be retaken freely).
+6. **Take notes** on any document.
+7. **Track progress** on a dashboard: documents, flashcards, cards due now, cards mastered, reviews today and over the last 7 days, 7-day accuracy, and your current daily streak.
+
+You can also delete a document, which removes everything generated from it.
 
 ## Tech Stack
 
 | Layer | Technology |
 |---|---|
-| Backend API | Python 3.12, FastAPI |
-| Database | PostgreSQL (SQLAlchemy 2.0 + Alembic migrations) |
-| Background jobs | Celery + Redis (PDF extraction, AI generation) |
-| AI / LLM | Google Gemini API (`google-genai`) |
-| Auth | JWT (`python-jose`) + bcrypt password hashing |
-| Frontend | React (Vite) |
-| Containerization | Docker + Docker Compose |
-| CI | GitHub Actions (backend: ruff + pytest against a real Postgres service; frontend: lint + build) |
+| Backend API | Python 3.12, FastAPI, SQLAlchemy 2.0, Alembic |
+| Database | PostgreSQL 16 |
+| Background jobs | Celery + Redis (PDF extraction and AI generation) |
+| AI | Google Gemini API (`google-genai` SDK) |
+| Auth | JWT (`python-jose`), bcrypt password hashing |
+| Frontend | React 19 + Vite, React Router |
+| Containers | Docker + Docker Compose |
+| CI | GitHub Actions (ruff, pytest, frontend lint and build) |
 
 ## Architecture
 
 ```
 ┌─────────────┐      ┌──────────────┐      ┌──────────────────┐
-│   React UI  │─────▶│  FastAPI API │─────▶│   PostgreSQL DB   │
+│  React UI   │─────▶│  FastAPI API │─────▶│  PostgreSQL DB   │
 └─────────────┘      └──────┬───────┘      └──────────────────┘
-                             │
-                             ▼
-                     ┌───────────────┐      ┌─────────────────┐
-                     │ Celery Worker │─────▶│   Gemini API     │
-                     └───────┬───────┘      └─────────────────┘
-                             │
-                             ▼
-                      ┌─────────────┐
-                      │    Redis    │
-                      └─────────────┘
+                            │ enqueue
+                            ▼
+                     ┌─────────────┐      ┌──────────────────┐
+                     │    Redis    │─────▶│  Celery Worker   │
+                     └─────────────┘      └────────┬─────────┘
+                                                   │
+                                      ┌────────────┴────────────┐
+                                      ▼                         ▼
+                              PDF text extraction        Google Gemini API
+                                 (pypdf)            (summaries, flashcards, tests)
 ```
-
-The worker handles two kinds of background work: PDF text extraction (runs automatically after every upload) and AI generation (summaries, flashcards, practice tests — triggered manually from the UI by default; see `AUTO_GENERATE_SUMMARIES` below for why).
 
 ## Getting Started
 
-### Prerequisites
-- Docker & Docker Compose
-- Python **3.12** locally if you'll run backend commands (tests, migrations) outside Docker — the backend image is built on 3.12, and some dependencies used here require 3.10+
-- A free [Google AI Studio](https://aistudio.google.com/) API key for Gemini
+### Dependencies
 
-### Setup
+You only need these installed on your machine:
+
+- **Git**
+- **Docker Desktop** (includes Docker Compose v2): https://www.docker.com/products/docker-desktop
+- **A Google Gemini API key** (the free tier is enough): https://aistudio.google.com/apikey
+- **OpenSSL** (preinstalled on macOS and most Linux) to generate a secret key. Any long random string works if you don't have it.
+
+Everything else is installed automatically inside the containers:
+
+- Python packages are listed in [`backend/requirements.txt`](backend/requirements.txt) (FastAPI, SQLAlchemy, Alembic, Celery, Redis client, pypdf, google-genai, and others).
+- JavaScript packages are listed in [`frontend/package.json`](frontend/package.json) (React, React Router, Vite).
+- Runtime images: `python:3.12-slim`, `node:20-slim`, `postgres:16`, `redis:7`.
+
+### Run it
+
+**1. Clone the repo**
 
 ```bash
 git clone https://github.com/CKepperling/StudyTime.git
 cd StudyTime
-cp .env.example .env   # fill in a real SECRET_KEY and GEMINI_API_KEY
+```
+
+**2. Create your `.env` file**
+
+```bash
+cp .env.example .env
+```
+
+Open `.env` and set two values:
+
+- `GEMINI_API_KEY`: paste your key from Google AI Studio.
+- `SECRET_KEY`: generate one with `openssl rand -hex 32` and paste the output.
+
+The other defaults work as-is for Docker (see [Environment Variables](#environment-variables)).
+
+**3. Build and start everything**
+
+```bash
 docker compose -f Docker-compose.yml up --build
 ```
 
-> Note the compose file here is named `Docker-compose.yml` (capital D), not the more common lowercase `docker-compose.yml` — pass `-f Docker-compose.yml` explicitly, or just `docker compose up --build` on macOS, where the filesystem is case-insensitive and finds it either way. Linux users and CI need the explicit `-f` flag.
+The `-f` flag matters: the file is named `Docker-compose.yml` (capital D), which Docker only finds automatically on case-insensitive filesystems like macOS.
 
-- Frontend: http://localhost:5173
-- Backend API docs: http://localhost:8000/docs
+**4. Create the database tables (first run only)**
 
-### Environment Variables
+Wait until the logs show the backend is running, then in a second terminal:
 
-All of these live in `.env` (copy `.env.example` to start) and are documented inline there too.
+```bash
+docker compose -f Docker-compose.yml exec backend alembic upgrade head
+```
 
-| Variable | Description |
+The app does not create tables on startup, so skip this and sign-up will fail with a "relation does not exist" error.
+
+**5. Open the app**
+
+| What | URL |
 |---|---|
-| `DATABASE_URL` | Postgres connection string (use service name `postgres` as host, not `localhost`, so containers can reach each other) |
-| `REDIS_URL` | Redis connection string, used as the Celery broker |
-| `GEMINI_API_KEY` | Your Google AI Studio API key |
-| `GENERATION_MODEL` | Which Gemini model to call. Defaults to a Flash-Lite model — the team's free-tier key is capped at a tight daily request quota on full Flash models, and Lite gets a much higher daily allowance. Switch to a current full Flash model before a demo. |
-| `AUTO_GENERATE_SUMMARIES` | `true`/`false`. When `false` (the default), summaries/flashcards/practice tests only generate when explicitly triggered from the UI ("Generate summaries" etc.), to conserve the daily Gemini quota during development. Set to `true` for automatic generation right after upload — nicer for a demo. |
-| `SECRET_KEY` | Signs JWTs. Generate with `openssl rand -hex 32` |
-| `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` | Used by the Postgres container itself on first init |
+| Web app | http://localhost:5173 |
+| API docs (Swagger) | http://localhost:8000/docs |
+| Health check | http://localhost:8000/health |
+
+To stop everything, press `Ctrl+C` and run `docker compose -f Docker-compose.yml down`. Add `-v` to also wipe the database.
+
+### Using the app
+
+1. Go to http://localhost:5173 and **sign up** with an email and password.
+2. On **Documents**, choose a PDF and click **Upload**. Wait for its status to change to `extracted`.
+3. Click the document. From there you can **Generate summaries**, **Generate practice test**, open **Notes**, or open **View flashcards** and click **Generate flashcards with AI**.
+4. Open **Review queue** to review due cards and grade yourself.
+5. Open **Progress** to see your stats.
+
+AI generation is **manual by default** to conserve free-tier Gemini quota. To generate everything automatically after upload, set the three `AUTO_GENERATE_*` variables to `true` in `.env` and restart.
+
+## Environment Variables
+
+All of these live in `.env` at the repo root (copy from `.env.example`).
+
+| Variable | Required | Description |
+|---|---|---|
+| `GEMINI_API_KEY` | Yes | Google Gemini API key. |
+| `SECRET_KEY` | Yes | Signs login tokens. Generate with `openssl rand -hex 32`. |
+| `DATABASE_URL` | Yes | Postgres connection string. Default points at the `postgres` Docker service. |
+| `REDIS_URL` | Yes | Redis connection string. Default points at the `redis` Docker service. |
+| `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` | Yes | Credentials for the Postgres container. Must match `DATABASE_URL`. |
+| `GENERATION_MODEL` | No | Gemini model used for generation. Defaults to `gemini-3.5-flash-lite`, which has a much higher free daily quota. Switch to a larger Flash model for better quality (e.g. for a demo). |
+| `AUTO_GENERATE_SUMMARIES` | No | `true` to generate summaries automatically after upload. Default `false`. |
+| `AUTO_GENERATE_FLASHCARDS` | No | `true` to generate flashcards automatically after upload. Default `false`. |
+| `AUTO_GENERATE_PRACTICE_TESTS` | No | `true` to generate a practice test automatically after upload. Default `false`. |
+| `UPLOAD_DIR` | No | Where uploaded PDFs are stored. Default `uploads` (inside `backend/`). |
+| `CELERY_TASK_ALWAYS_EAGER` | No | `true` runs background tasks inline with no worker or Redis. Used by tests and CI. |
+| `VITE_API_BASE_URL` | No | Frontend's API address. Default `http://localhost:8000`. |
+
+## API Overview
+
+Interactive docs with request and response schemas are at http://localhost:8000/docs. All routes except `/auth/signup`, `/auth/login`, and `/health` require a `Bearer` token.
+
+| Area | Endpoints |
+|---|---|
+| Auth | `POST /auth/signup`, `POST /auth/login`, `GET /auth/me` |
+| Documents | `POST /documents`, `GET /documents`, `GET /documents/{id}`, `DELETE /documents/{id}` |
+| Summaries | `POST /documents/{id}/generate-summaries`, `GET /documents/{id}/summaries` |
+| Flashcards | `GET/POST /documents/{id}/flashcards`, `POST /documents/{id}/generate-flashcards`, `GET /flashcards/due`, `POST /flashcards/{id}/review` |
+| Practice tests | `POST /documents/{id}/generate-practice-test`, `GET /documents/{id}/practice-tests`, `GET /practice-tests/{id}`, `POST /practice-tests/{id}/submit` |
+| Notes | `GET/POST /documents/{id}/notes`, `PUT/DELETE /notes/{id}` |
+| Progress | `GET /progress` |
+
+## Running Tests and Lint
+
+Tests run against a real Postgres database and mock all Gemini calls, so no API key or quota is used.
+
+```bash
+# 1. Start only the database
+docker compose -f Docker-compose.yml up -d postgres
+
+# 2. Set up a Python 3.12 virtual environment
+cd backend
+python3.12 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt ruff
+
+# 3. Create tables, then test and lint
+export DATABASE_URL="postgresql://studytime:studytime@localhost:5432/studytime"
+export SECRET_KEY="any-value" GEMINI_API_KEY="any-value" CELERY_TASK_ALWAYS_EAGER=true
+alembic upgrade head
+pytest
+ruff check .
+```
+
+The frontend has its own checks:
+
+```bash
+cd frontend
+npm ci
+npm run lint
+npm run build
+```
+
+GitHub Actions runs all of the above on every push and pull request to `main`.
+
+## Troubleshooting
+
+| Problem | Fix |
+|---|---|
+| `no configuration file provided: not found` | Docker can't find `Docker-compose.yml`. Add `-f Docker-compose.yml` to the command. |
+| `relation "users" does not exist` on sign-up | Run step 4: `docker compose -f Docker-compose.yml exec backend alembic upgrade head`. |
+| `variable is not set` warnings or a Postgres crash on startup | `.env` is missing or incomplete. Re-copy it from `.env.example`. |
+| Generation fails with a quota or 429 error | You've hit the Gemini free-tier limit. Keep `GENERATION_MODEL` on the flash-lite model or wait for the daily reset. |
+| Document stuck on `pending` | The worker isn't running. Check `docker compose -f Docker-compose.yml logs worker`. |
+| Browser shows a network or CORS error | The API only allows requests from http://localhost:5173. Open the app at exactly that address. |
+| Port 5173, 8000, 5432, or 6379 already in use | Stop the local service using it, or change the port mapping in `Docker-compose.yml`. |
 
 ## Project Structure
 
@@ -89,46 +219,23 @@ All of these live in `.env` (copy `.env.example` to start) and are documented in
 StudyTime/
 ├── backend/
 │   ├── app/
-│   │   ├── api/            # FastAPI route handlers
-│   │   │   ├── auth.py           # signup, login, /auth/me
-│   │   │   ├── documents.py      # upload, list/get/delete, and every
-│   │   │   │                     #   document-scoped sub-resource
-│   │   │   │                     #   (flashcards, summaries, practice
-│   │   │   │                     #   tests, generation triggers)
-│   │   │   ├── flashcards.py     # due queue + SM-2 review submission
-│   │   │   ├── notes.py          # notes CRUD
-│   │   │   ├── practice_tests.py # take a test, submit + grade
-│   │   │   ├── progress.py       # dashboard stats
-│   │   │   └── deps.py           # get_current_user dependency
-│   │   ├── models/         # SQLAlchemy models (one file per table)
-│   │   ├── schemas/        # Pydantic request/response shapes
-│   │   ├── services/       # business logic with no FastAPI dependency:
-│   │   │   ├── auth.py               # password hashing, JWT
-│   │   │   ├── generation.py         # shared Gemini call + schema
-│   │   │   │                         #   validation, everything AI-
-│   │   │   │                         #   generated is built on this
-│   │   │   ├── summary.py            # per-level summary prompts
-│   │   │   ├── flashcard_generation.py
-│   │   │   ├── practice_test_generation.py
-│   │   │   ├── sm2.py                # spaced-repetition scheduling math
-│   │   │   └── progress.py           # dashboard aggregation queries
-│   │   ├── workers/        # Celery app + tasks (extraction, all
-│   │   │                   #   three generation types)
-│   │   ├── storage.py      # shared UPLOAD_DIR definition
-│   │   └── main.py
-│   ├── alembic/            # migrations
-│   ├── tests/
+│   │   ├── api/           # FastAPI routes: auth, documents, flashcards, notes, practice_tests, progress
+│   │   ├── models/        # SQLAlchemy models
+│   │   ├── schemas/       # Pydantic request/response schemas
+│   │   ├── services/      # Gemini generation, SM-2 scheduling, progress stats, auth
+│   │   ├── workers/       # Celery app and background tasks
+│   │   ├── db.py, storage.py, main.py
+│   ├── alembic/           # Database migrations
+│   ├── tests/             # pytest suite
 │   ├── requirements.txt
 │   └── Dockerfile
 ├── frontend/
 │   ├── src/
-│   │   ├── api/            # one file per backend resource, all built
-│   │   │                   #   on api/client.js's shared apiFetch
-│   │   ├── components/     # Layout, ProtectedRoute, AuthForm
-│   │   ├── context/        # AuthContext (token + current user state)
-│   │   └── pages/          # Home, DocumentDetail, FlashcardList,
-│   │                       #   Notes, PracticeTest, Review, Progress,
-│   │                       #   Login, Signup
+│   │   ├── api/           # Backend API client
+│   │   ├── components/    # Layout, auth form, protected route
+│   │   ├── context/       # Auth state
+│   │   └── pages/         # Home, Login, Signup, DocumentDetail, FlashcardList, Notes, Review, PracticeTest, Progress
+│   ├── package.json
 │   └── Dockerfile
 ├── .github/workflows/ci.yml
 ├── Docker-compose.yml
@@ -136,40 +243,10 @@ StudyTime/
 └── README.md
 ```
 
-## Running Tests
+## Contributing
 
-The backend test suite needs several environment variables set that Docker normally provides automatically — when running `pytest` directly (not through Docker), set them inline:
+- Work on a branch prefixed with its ticket number, and open a pull request into `main`.
+- CI (lint, tests, build) must pass before merging.
+- Don't commit `.env` or anything under `backend/uploads/`; both are gitignored.
 
-```bash
-cd backend
-source .venv/bin/activate   # a Python 3.12 venv
-pip install -r requirements.txt
-
-DATABASE_URL="postgresql://studytime:studytime@localhost:5432/studytime" \
-SECRET_KEY="any-value-for-local-testing" \
-GEMINI_API_KEY="any-value-unless-a-test-calls-the-real-API" \
-CELERY_TASK_ALWAYS_EAGER=true \
-pytest
-```
-
-(`docker compose up -d postgres` first, if Postgres isn't already running.)
-
-Most Gemini-backed tests mock the API call rather than hitting the real service, so a real `GEMINI_API_KEY` isn't required for the suite to pass — it's still needed for the app itself to run, since `app/services/generation.py` reads it at import time.
-
-Lint with `ruff check .` the same way, with the same environment variables set.
-
-CI runs both automatically on every PR against `main`, using a real (throwaway) Postgres service container — see `.github/workflows/ci.yml`.
-
-## Known Gotchas
-
-A few things that cost real debugging time during development, worth knowing up front:
-
-- **Python version matters.** Some dependencies here (notably `google-genai`) require Python 3.10+, and a few SQLAlchemy model type hints assume 3.10+ union syntax support. Use Python 3.12 locally to match the Docker image exactly.
-- **File casing.** macOS's filesystem is case-insensitive; Linux (including GitHub Actions) is not. A local build can succeed with a file/import casing mismatch that then fails in CI. If a build fails in CI with an `UNRESOLVED_IMPORT` error that doesn't reproduce locally, check for a casing mismatch with `git ls-files | grep -i <name>`.
-- **`bcrypt` is pinned to `4.0.1`**, not the latest release — `passlib==1.7.4` (the version this project uses) is incompatible with `bcrypt>=4.1`.
-- **Gemini's free-tier daily quota is tight** on full Flash models (roughly 20 requests/day at time of writing) — this is why generation defaults to a Flash-Lite model and to manual triggering rather than automatic-on-upload. See `GENERATION_MODEL` and `AUTO_GENERATE_SUMMARIES` above.
-- **Gemini model names change fairly often** — if a generation call 404s with a message naming a different recommended model, that's the fix: update `GENERATION_MODEL` in `.env` to whatever name the error suggests.
-
-## License
-
-MIT (or your team's choice — update before submission).
+AI tool usage on this project follows the course [AI Policy](https://github.com/CS3704-VT/Course/blob/main/AI_POLICY.md).
